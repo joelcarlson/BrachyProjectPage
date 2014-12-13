@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <title>Brachytherapy Research by joelcarlson</title>
+  </head>
+
+  <body>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>Brachytherapy Research</h1>
+          <h2>Calculations and Data</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/joelcarlson/BrachyProjectPage/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/joelcarlson/BrachyProjectPage/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/joelcarlson/BrachyProjectPage" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <hr>
+
+<p>layout: page
+title: "Brachytherapy Reproducible Research"</p>
+
+<h2>
+<a id="permalink-brachytherapyrepro" class="anchor" href="#permalink-brachytherapyrepro" aria-hidden="true"><span class="octicon octicon-link"></span></a>permalink: /brachytherapyRepro/</h2>
+
+<h2>
+<a id="introduction" class="anchor" href="#introduction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Introduction</h2>
+
+<p>In this document I will explain the calculations required to obtain TG-43 parameters for a new brachytherapy seed. The document contains  R functions capable of calculating all required quantities of interest in a reproducible fashion.</p>
+
+<h2>
+<a id="calculated-quantities" class="anchor" href="#calculated-quantities" aria-hidden="true"><span class="octicon octicon-link"></span></a>Calculated quantities</h2>
+
+<h3>
+<a id="geometry-function" class="anchor" href="#geometry-function" aria-hidden="true"><span class="octicon octicon-link"></span></a>Geometry Function</h3>
+
+<p>The first required quantity is the <strong>Geometry Function</strong>.  The purpose of the geometry function is to improve the accuracy with which dose rates can be estimated through interpolation. The line source model is recommended in <a href="https://www.aapm.org/pubs/reports/rpt_84.pdf">TG-43</a>, with geometry as in this diagram:</p>
+
+<p><img src="http://i.imgur.com/LArTEEz.png" title="source: imgur.com"></p>
+
+<p>The equation for the Geometry function is as follows:</p>
+
+<p><img src="http://i.imgur.com/zuuOzh2.png" title="source: imgur.com"></p>
+
+<p>To calculate the geometry function we define several function.  The equations for each side of the diagram, and \(\beta\), and use the outputs from these functions to calculate the geometry function:</p>
+
+<p>{% highlight r %}
+Beta &lt;- function(theta, r, L=0.3){
+    side1 &lt;- sqrt((L/2)^2 + r^2 - L<em>r</em>cos(pi - theta))
+    side2 &lt;- sqrt((L/2)^2 + r^2 - L<em>r</em>cos(theta))
+    beta &lt;- acos((side1^2 + side2^2 - L^2)/(2<em>side1</em>side2))<br>
+    return(beta)
+}    </p>
+
+<p>GeomFunction &lt;- function(theta, r, L=0.3){
+    if(theta == 0){geom &lt;- 1/(r^2 - (L^2)/4)}
+    else{geom &lt;- Beta(theta, r, L)/(L<em>r</em>sin(theta))}
+    return(geom)<br>
+}</p>
+
+<h1>
+<a id="example-calculation" class="anchor" href="#example-calculation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Example calculation:</h1>
+
+<p>GeomFunction(pi/18, 10,0.3)
+{% endhighlight %}</p>
+
+<p>{% highlight text %}</p>
+
+<h2>
+<a id="1-001" class="anchor" href="#1-001" aria-hidden="true"><span class="octicon octicon-link"></span></a>[1] 0.01</h2>
+
+<p>{% endhighlight %}</p>
+
+<h2>
+<a id="measured-quantities" class="anchor" href="#measured-quantities" aria-hidden="true"><span class="octicon octicon-link"></span></a>Measured Quantities</h2>
+
+<p>All measured quantities are "measured" using Monte Carlo simulation.  In this case, MCNPX was used for calculation.  The rest of the document will assume that the Mone Carlo calculations are complete, and the output files are organized in a directory structure such as this:</p>
+
+<p><img src="http://i.imgur.com/GzQqm6E.png" title="source: imgur.com"></p>
+
+<h3>
+<a id="dose-rate-constant" class="anchor" href="#dose-rate-constant" aria-hidden="true"><span class="octicon octicon-link"></span></a>Dose Rate Constant</h3>
+
+<p>The output file should look like this: <a href="https://raw.githubusercontent.com/joelcarlson/Reproducible-TG43-Brachytherapy/master/Aug28KAERIFA.txt">MCNP output file</a>.</p>
+
+<p>This output file contains the detector element surfaces relevant to calculating 2D anisotropy, hence the many warnings, however they do not alter the output in any way. A function must be written to extract the relevant detector cell tallies described in this diagram, where F6 indicates the track length estimator tally in MCNPX:</p>
+
+<p><img src="http://i.imgur.com/g2Jd0fg.png" title="source: imgur.com"></p>
+
+<p>Dose rate constant is calculated as:</p>
+
+<p><img src="http://i.imgur.com/qxnGZvk.png" title="source: imgur.com"></p>
+
+<p>Given the output file we define a function to extract the cell tally values and use them to calculate the dose rate constant of the seed:</p>
+
+<p>{% highlight r %}
+library(stringr)</p>
+
+<p>doseRC &lt;- function(upper.cell = 803, lower.cell = 802, r=30, file.path= "DoseRateOutfile/KAERIFreeAir.txt"){
+    #Read the output file
+    sctext &lt;- scan(file.path, character(0), sep = "\n")</p>
+
+<pre><code>#Find and extract tally value, then trim whitespace and extract value 
+##Upper tally
+upper &lt;- which(is.na(str_extract(sctext,paste0("cell  ",upper.cell)))==FALSE)
+upper &lt;- sctext[upper + 1]
+upper &lt;- as.numeric(unlist(str_split(str_trim(upper), " "))[1])
+
+##Lower tally
+lower &lt;- which(is.na(str_extract(sctext,paste0("cell  ",lower.cell)))==FALSE)
+lower &lt;- sctext[lower + 1]
+lower &lt;- as.numeric(unlist(str_split(str_trim(lower), " "))[1])
+
+#calculate air kerma
+doseRC &lt;- lower/(upper * (r^2))
+return(doseRC)
+</code></pre>
+
+<p>}   </p>
+
+<p>doseRC()
+{% endhighlight %}</p>
+
+<p>{% highlight text %}</p>
+
+<h2>
+<a id="1-09174" class="anchor" href="#1-09174" aria-hidden="true"><span class="octicon octicon-link"></span></a>[1] 0.9174</h2>
+
+<p>{% endhighlight %}</p>
+
+<h3>
+<a id="radial-dose-function" class="anchor" href="#radial-dose-function" aria-hidden="true"><span class="octicon octicon-link"></span></a>Radial Dose Function</h3>
+
+<p>The next quantity of interest to calculate is the <strong>Radial Dose Function</strong>, \(g_L(r)\).  The formula is as follows:</p>
+
+<p><img src="http://i.imgur.com/WfRfmk5.png" title="source: imgur.com"></p>
+
+<p>Therefore we need to access the tally values from our output from the simulation with the detectors on the transverse plane (ie. \(\theta_0\)). The output file should look like this: <a href="https://raw.githubusercontent.com/joelcarlson/Reproducible-TG43-Brachytherapy/master/KAERI_90_out.txt">example output file</a>.</p>
+
+<p>A similar method is used as for the extraction of the dose rate constant.  To note, the input of the function called <code>cell.range</code> is the range of cells used to define the detector elements (tallies), and <code>radii</code> is a vector containing the distance of each detector element from the seed.</p>
+
+<p>{% highlight r %}</p>
+
+<h2>
+<a id="find-f6-tally-value-at-given-cell-range-and-radii-outputs-a-dataframe-containing-dr90" class="anchor" href="#find-f6-tally-value-at-given-cell-range-and-radii-outputs-a-dataframe-containing-dr90" aria-hidden="true"><span class="octicon octicon-link"></span></a>Find F6 tally value at given cell range and radii, outputs a dataframe containing D(r,90)</h2>
+
+<p>Dr90 &lt;- function(cell.range = c(223:246), radii=c(0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.25,1.5,1.75,2,2.5,3,3.5,4,4.5,5,6,7,8,9,10), file.path= "AnisoOutFiles/KAERI_90_out.txt"){
+    #Read the output file
+    sctext &lt;- scan(file.path, character(0), sep = "\n")
+    f6vals &lt;- c()
+    for(i in cell.range){
+      cellval &lt;- which(is.na(str_extract(sctext,paste0("cell  ",i)))==FALSE)
+      cellval &lt;- sctext[cellval + 1]
+      cellval &lt;- as.numeric(unlist(str_split(str_trim(cellval), " "))[1])
+      f6vals &lt;- append(f6vals, cellval)
+    }</p>
+
+<pre><code>Dr90 &lt;- data.frame("r"=radii, "Dr90"=f6vals )
+return(Dr90)
+</code></pre>
+
+<p>}</p>
+
+<h2>
+<a id="use-our-geomfunction-and-dr90-to-calculate-the-radial-dose-function" class="anchor" href="#use-our-geomfunction-and-dr90-to-calculate-the-radial-dose-function" aria-hidden="true"><span class="octicon octicon-link"></span></a>Use our GeomFunction and Dr90 to calculate the radial dose function</h2>
+
+<p>RadialDoseFunction &lt;- function(){
+  #Define values
+  Dr90 &lt;- Dr90()
+  D190 &lt;- Dr90[Dr90$r==1.00,"Dr90"]
+  GLr90 &lt;- c()
+  for(i in Dr90[,"r"]){
+      GLr90 &lt;- append(GLr90,GeomFunction(pi/2, i))
+  }
+  GL190 &lt;- GeomFunction(pi/2, 1)</p>
+
+<p>RDtable &lt;- data.frame(Dr90, GLr90)</p>
+
+<p>RDtable$gLr &lt;- (RDtable$Dr90 / D190) * (GL190 / RDtable$GLr90)
+  return(RDtable)
+}</p>
+
+<p>RadialDoseFunction()
+{% endhighlight %}</p>
+
+<p>{% highlight text %}</p>
+
+<h2>
+<a id="r------dr90-----glr90-----glr" class="anchor" href="#r------dr90-----glr90-----glr" aria-hidden="true"><span class="octicon octicon-link"></span></a>r      Dr90     GLr90     gLr</h2>
+
+<h2>
+<a id="1---025-3658e-03-14411187-108665" class="anchor" href="#1---025-3658e-03-14411187-108665" aria-hidden="true"><span class="octicon octicon-link"></span></a>1   0.25 3.658e-03 14.411187 1.08665</h2>
+
+<h2>
+<a id="2---030-2611e-03-10303280-108473" class="anchor" href="#2---030-2611e-03-10303280-108473" aria-hidden="true"><span class="octicon octicon-link"></span></a>2   0.30 2.611e-03 10.303280 1.08473</h2>
+
+<h2>
+<a id="3---040-1506e-03--5979511-107839" class="anchor" href="#3---040-1506e-03--5979511-107839" aria-hidden="true"><span class="octicon octicon-link"></span></a>3   0.40 1.506e-03  5.979511 1.07839</h2>
+
+<h2>
+<a id="4---050-9696e-04--3886091-106812" class="anchor" href="#4---050-9696e-04--3886091-106812" aria-hidden="true"><span class="octicon octicon-link"></span></a>4   0.50 9.696e-04  3.886091 1.06812</h2>
+
+<h2>
+<a id="5---060-6718e-04--2721985-105652" class="anchor" href="#5---060-6718e-04--2721985-105652" aria-hidden="true"><span class="octicon octicon-link"></span></a>5   0.60 6.718e-04  2.721985 1.05652</h2>
+
+<h2>
+<a id="6---070-4900e-04--2010413-104354" class="anchor" href="#6---070-4900e-04--2010413-104354" aria-hidden="true"><span class="octicon octicon-link"></span></a>6   0.70 4.900e-04  2.010413 1.04354</h2>
+
+<h2>
+<a id="7---080-3717e-04--1544566-103029" class="anchor" href="#7---080-3717e-04--1544566-103029" aria-hidden="true"><span class="octicon octicon-link"></span></a>7   0.80 3.717e-04  1.544566 1.03029</h2>
+
+<h2>
+<a id="8---090-2901e-04--1223324-101540" class="anchor" href="#8---090-2901e-04--1223324-101540" aria-hidden="true"><span class="octicon octicon-link"></span></a>8   0.90 2.901e-04  1.223324 1.01540</h2>
+
+<h2>
+<a id="9---100-2319e-04--0992600-100000" class="anchor" href="#9---100-2319e-04--0992600-100000" aria-hidden="true"><span class="octicon octicon-link"></span></a>9   1.00 2.319e-04  0.992600 1.00000</h2>
+
+<h2>
+<a id="10--125-1425e-04--0636954-095755" class="anchor" href="#10--125-1425e-04--0636954-095755" aria-hidden="true"><span class="octicon octicon-link"></span></a>10  1.25 1.425e-04  0.636954 0.95755</h2>
+
+<h2>
+<a id="11--150-9441e-05--0442972-091241" class="anchor" href="#11--150-9441e-05--0442972-091241" aria-hidden="true"><span class="octicon octicon-link"></span></a>11  1.50 9.441e-05  0.442972 0.91241</h2>
+
+<h2>
+<a id="12--175-6586e-05--0325734-086557" class="anchor" href="#12--175-6586e-05--0325734-086557" aria-hidden="true"><span class="octicon octicon-link"></span></a>12  1.75 6.586e-05  0.325734 0.86557</h2>
+
+<h2>
+<a id="13--200-4773e-05--0249533-081896" class="anchor" href="#13--200-4773e-05--0249533-081896" aria-hidden="true"><span class="octicon octicon-link"></span></a>13  2.00 4.773e-05  0.249533 0.81896</h2>
+
+<h2>
+<a id="14--250-2714e-05--0159808-072719" class="anchor" href="#14--250-2714e-05--0159808-072719" aria-hidden="true"><span class="octicon octicon-link"></span></a>14  2.50 2.714e-05  0.159808 0.72719</h2>
+
+<h2>
+<a id="15--300-1661e-05--0111019-064063" class="anchor" href="#15--300-1661e-05--0111019-064063" aria-hidden="true"><span class="octicon octicon-link"></span></a>15  3.00 1.661e-05  0.111019 0.64063</h2>
+
+<h2>
+<a id="16--350-1068e-05--0081583-056059" class="anchor" href="#16--350-1068e-05--0081583-056059" aria-hidden="true"><span class="octicon octicon-link"></span></a>16  3.50 1.068e-05  0.081583 0.56059</h2>
+
+<h2>
+<a id="17--400-7134e-06--0062471-048886" class="anchor" href="#17--400-7134e-06--0062471-048886" aria-hidden="true"><span class="octicon octicon-link"></span></a>17  4.00 7.134e-06  0.062471 0.48886</h2>
+
+<h2>
+<a id="18--450-4894e-06--0049364-042439" class="anchor" href="#18--450-4894e-06--0049364-042439" aria-hidden="true"><span class="octicon octicon-link"></span></a>18  4.50 4.894e-06  0.049364 0.42439</h2>
+
+<h2>
+<a id="19--500-3434e-06--0039988-036762" class="anchor" href="#19--500-3434e-06--0039988-036762" aria-hidden="true"><span class="octicon octicon-link"></span></a>19  5.00 3.434e-06  0.039988 0.36762</h2>
+
+<h2>
+<a id="20--600-1779e-06--0027772-027418" class="anchor" href="#20--600-1779e-06--0027772-027418" aria-hidden="true"><span class="octicon octicon-link"></span></a>20  6.00 1.779e-06  0.027772 0.27418</h2>
+
+<h2>
+<a id="21--700-9681e-07--0020405-020311" class="anchor" href="#21--700-9681e-07--0020405-020311" aria-hidden="true"><span class="octicon octicon-link"></span></a>21  7.00 9.681e-07  0.020405 0.20311</h2>
+
+<h2>
+<a id="22--800-5465e-07--0015623-014974" class="anchor" href="#22--800-5465e-07--0015623-014974" aria-hidden="true"><span class="octicon octicon-link"></span></a>22  8.00 5.465e-07  0.015623 0.14974</h2>
+
+<h2>
+<a id="23--900-3176e-07--0012345-011016" class="anchor" href="#23--900-3176e-07--0012345-011016" aria-hidden="true"><span class="octicon octicon-link"></span></a>23  9.00 3.176e-07  0.012345 0.11016</h2>
+
+<h2>
+<a id="24-1000-1892e-07--0009999-008102" class="anchor" href="#24-1000-1892e-07--0009999-008102" aria-hidden="true"><span class="octicon octicon-link"></span></a>24 10.00 1.892e-07  0.009999 0.08102</h2>
+
+<p>{% endhighlight %}</p>
+
+<h3>
+<a id="2d-anisotropy-function" class="anchor" href="#2d-anisotropy-function" aria-hidden="true"><span class="octicon octicon-link"></span></a>2D Anisotropy Function</h3>
+
+<p>The next and final calculation is of the <strong>2D anisotropy function</strong>.  The formula for the 2D anisotropy function is:</p>
+
+<p><img src="http://i.imgur.com/X3on0Ng.png" title="source: imgur.com"></p>
+
+<p>For this function, the data is stored across several different output files in the folder <code>AnisoOutFiles</code>.  There exists one output file every \(10^{\circ}\) for a total of 10 files (for publication quality it is recommended that every \(5^{\circ}\) be sampled.)</p>
+
+<p>Based on our detector cell definitions, the detectors along \(\theta = 0\) go from 7 to 30, \(\theta = 10\) from 31 to 54 and so on (\(\theta = 90\) from 223 to 246, as in the radial dose function calculation).</p>
+
+<p>The first step is to create a function to extract the tally values and build a data frame based on them:</p>
+
+<p>{% highlight r %}</p>
+
+<h1>
+<a id="build-dataframe-of-tally-results-by-angle-output-files-must-be-in-order-from-00-to-90-degrees" class="anchor" href="#build-dataframe-of-tally-results-by-angle-output-files-must-be-in-order-from-00-to-90-degrees" aria-hidden="true"><span class="octicon octicon-link"></span></a>Build dataframe of tally results by angle. Output files <em>MUST</em> be in order from 00 to 90 degrees</h1>
+
+<h1>
+<a id="radii-are-the-distances-of-detector-cells-from-seed" class="anchor" href="#radii-are-the-distances-of-detector-cells-from-seed" aria-hidden="true"><span class="octicon octicon-link"></span></a>radii are the distances of detector cells from seed,</h1>
+
+<p>buildTallyDF &lt;- function(file.dir = "AnisoOutFiles", first.cell=7, radii=c(0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.25,1.5,1.75,2,2.5,3,3.5,4,4.5,5,6,7,8,9,10)){
+  #Add radii column
+  TallyDF &lt;- data.frame("r"=radii)
+  #For each file in the directory create vector of appropriate cell values, append to DF
+  for(file.name in list.files(file.dir)){
+    file &lt;- scan(paste0(file.dir,"/",file.name), character(0), sep = "\n")
+    f6vals &lt;- c()</p>
+
+<pre><code>for(i in seq(first.cell, first.cell+length(radii)-1)){
+  cellval &lt;- which(is.na(str_extract(file,paste0("cell  ",i)))==FALSE)
+  cellval &lt;- file[cellval + 1]
+  cellval &lt;- as.numeric(unlist(str_split(str_trim(cellval), " "))[1])
+  f6vals &lt;- append(f6vals, cellval)
+}
+
+first.cell &lt;- first.cell + length(radii)
+TallyDF &lt;- data.frame(TallyDF, file.name = f6vals)
+</code></pre>
+
+<p>}
+  #rename columns using their respective angles
+  colnames(TallyDF)&lt;- c("r", seq(0,90, by=10))
+  return(TallyDF)
+}</p>
+
+<h1>
+<a id="buildtallydf" class="anchor" href="#buildtallydf" aria-hidden="true"><span class="octicon octicon-link"></span></a>buildTallyDF()</h1>
+
+<p>{% endhighlight %}</p>
+
+<p>Next, we use the newly created dataframe, <code>buildAnisoDF()</code>, to calculate the 2D anisotropy function using the above formula:</p>
+
+<p>{% highlight r %}
+Aniso &lt;- function(){
+  TallyDF &lt;- buildTallyDF()
+  #Divide all tally values by the tally value of that radius at 90 degrees
+  AnisoDF &lt;- TallyDF[,-1]/TallyDF[,"90"]
+  AnisoDF &lt;- cbind("r"=TallyDF[,1], AnisoDF)</p>
+
+<p>#At each position of the Aniso dataframe, multiply the aniso value by the geometry function at that point
+  for(angle in colnames(AnisoDF[,-1])){</p>
+
+<pre><code>for(radius in AnisoDF[,"r"]){
+
+ AnisoDF[AnisoDF$r==radius, angle] &lt;- AnisoDF[AnisoDF$r==radius, angle] * GeomFunction(pi/2, radius) / GeomFunction(as.numeric(angle)*pi/180, radius)
+</code></pre>
+
+<p>}}</p>
+
+<p>return(AnisoDF) 
+  }
+  Aniso()
+{% endhighlight %}</p>
+
+<p>{% highlight text %}</p>
+
+<h2>
+<a id="r----0---10---20---30---40---50---60---70---80-90" class="anchor" href="#r----0---10---20---30---40---50---60---70---80-90" aria-hidden="true"><span class="octicon octicon-link"></span></a>r    0   10   20   30   40   50   60   70   80 90</h2>
+
+<h2>
+<a id="1---025-020-049-094-105-108-107-097-099-100--1" class="anchor" href="#1---025-020-049-094-105-108-107-097-099-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>1   0.25 0.20 0.49 0.94 1.05 1.08 1.07 0.97 0.99 1.00  1</h2>
+
+<h2>
+<a id="2---030-019-046-082-100-105-107-101-099-100--1" class="anchor" href="#2---030-019-046-082-100-105-107-101-099-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>2   0.30 0.19 0.46 0.82 1.00 1.05 1.07 1.01 0.99 1.00  1</h2>
+
+<h2>
+<a id="3---040-021-047-075-094-102-105-107-099-100--1" class="anchor" href="#3---040-021-047-075-094-102-105-107-099-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>3   0.40 0.21 0.47 0.75 0.94 1.02 1.05 1.07 0.99 1.00  1</h2>
+
+<h2>
+<a id="4---050-022-048-073-091-100-104-106-106-100--1" class="anchor" href="#4---050-022-048-073-091-100-104-106-106-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>4   0.50 0.22 0.48 0.73 0.91 1.00 1.04 1.06 1.06 1.00  1</h2>
+
+<h2>
+<a id="5---060-024-051-073-089-099-104-106-107-100--1" class="anchor" href="#5---060-024-051-073-089-099-104-106-107-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>5   0.60 0.24 0.51 0.73 0.89 0.99 1.04 1.06 1.07 1.00  1</h2>
+
+<h2>
+<a id="6---070-026-052-074-089-099-103-106-106-100--1" class="anchor" href="#6---070-026-052-074-089-099-103-106-106-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>6   0.70 0.26 0.52 0.74 0.89 0.99 1.03 1.06 1.06 1.00  1</h2>
+
+<h2>
+<a id="7---080-028-054-074-088-098-103-105-106-100--1" class="anchor" href="#7---080-028-054-074-088-098-103-105-106-100--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>7   0.80 0.28 0.54 0.74 0.88 0.98 1.03 1.05 1.06 1.00  1</h2>
+
+<h2>
+<a id="8---090-029-055-075-088-098-103-105-106-105--1" class="anchor" href="#8---090-029-055-075-088-098-103-105-106-105--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>8   0.90 0.29 0.55 0.75 0.88 0.98 1.03 1.05 1.06 1.05  1</h2>
+
+<h2>
+<a id="9---100-031-056-075-088-097-102-105-106-106--1" class="anchor" href="#9---100-031-056-075-088-097-102-105-106-106--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>9   1.00 0.31 0.56 0.75 0.88 0.97 1.02 1.05 1.06 1.06  1</h2>
+
+<h2>
+<a id="10--125-035-059-076-088-097-102-104-106-106--1" class="anchor" href="#10--125-035-059-076-088-097-102-104-106-106--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>10  1.25 0.35 0.59 0.76 0.88 0.97 1.02 1.04 1.06 1.06  1</h2>
+
+<h2>
+<a id="11--150-038-061-077-088-096-102-104-105-105--1" class="anchor" href="#11--150-038-061-077-088-096-102-104-105-105--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>11  1.50 0.38 0.61 0.77 0.88 0.96 1.02 1.04 1.05 1.05  1</h2>
+
+<h2>
+<a id="12--175-041-063-078-089-096-101-104-105-105--1" class="anchor" href="#12--175-041-063-078-089-096-101-104-105-105--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>12  1.75 0.41 0.63 0.78 0.89 0.96 1.01 1.04 1.05 1.05  1</h2>
+
+<h2>
+<a id="13--200-042-064-079-089-096-101-103-105-105--1" class="anchor" href="#13--200-042-064-079-089-096-101-103-105-105--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>13  2.00 0.42 0.64 0.79 0.89 0.96 1.01 1.03 1.05 1.05  1</h2>
+
+<h2>
+<a id="14--250-046-066-080-089-096-101-103-104-105--1" class="anchor" href="#14--250-046-066-080-089-096-101-103-104-105--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>14  2.50 0.46 0.66 0.80 0.89 0.96 1.01 1.03 1.04 1.05  1</h2>
+
+<h2>
+<a id="15--300-049-068-081-090-096-100-103-104-104--1" class="anchor" href="#15--300-049-068-081-090-096-100-103-104-104--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>15  3.00 0.49 0.68 0.81 0.90 0.96 1.00 1.03 1.04 1.04  1</h2>
+
+<h2>
+<a id="16--350-053-070-081-090-096-100-102-104-104--1" class="anchor" href="#16--350-053-070-081-090-096-100-102-104-104--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>16  3.50 0.53 0.70 0.81 0.90 0.96 1.00 1.02 1.04 1.04  1</h2>
+
+<h2>
+<a id="17--400-057-071-082-090-096-100-102-103-104--1" class="anchor" href="#17--400-057-071-082-090-096-100-102-103-104--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>17  4.00 0.57 0.71 0.82 0.90 0.96 1.00 1.02 1.03 1.04  1</h2>
+
+<h2>
+<a id="18--450-059-072-083-090-096-100-102-103-103--1" class="anchor" href="#18--450-059-072-083-090-096-100-102-103-103--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>18  4.50 0.59 0.72 0.83 0.90 0.96 1.00 1.02 1.03 1.03  1</h2>
+
+<h2>
+<a id="19--500-063-073-083-090-095-099-102-103-103--1" class="anchor" href="#19--500-063-073-083-090-095-099-102-103-103--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>19  5.00 0.63 0.73 0.83 0.90 0.95 0.99 1.02 1.03 1.03  1</h2>
+
+<h2>
+<a id="20--600-065-074-084-090-095-099-101-102-103--1" class="anchor" href="#20--600-065-074-084-090-095-099-101-102-103--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>20  6.00 0.65 0.74 0.84 0.90 0.95 0.99 1.01 1.02 1.03  1</h2>
+
+<h2>
+<a id="21--700-068-076-084-090-095-099-101-102-102--1" class="anchor" href="#21--700-068-076-084-090-095-099-101-102-102--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>21  7.00 0.68 0.76 0.84 0.90 0.95 0.99 1.01 1.02 1.02  1</h2>
+
+<h2>
+<a id="22--800-069-076-085-091-095-099-101-102-102--1" class="anchor" href="#22--800-069-076-085-091-095-099-101-102-102--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>22  8.00 0.69 0.76 0.85 0.91 0.95 0.99 1.01 1.02 1.02  1</h2>
+
+<h2>
+<a id="23--900-072-077-085-091-095-099-101-102-102--1" class="anchor" href="#23--900-072-077-085-091-095-099-101-102-102--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>23  9.00 0.72 0.77 0.85 0.91 0.95 0.99 1.01 1.02 1.02  1</h2>
+
+<h2>
+<a id="24-1000-074-078-085-091-095-098-100-101-102--1" class="anchor" href="#24-1000-074-078-085-091-095-098-100-101-102--1" aria-hidden="true"><span class="octicon octicon-link"></span></a>24 10.00 0.74 0.78 0.85 0.91 0.95 0.98 1.00 1.01 1.02  1</h2>
+
+<p>{% endhighlight %}</p>
+
+<h2>
+<a id="plots" class="anchor" href="#plots" aria-hidden="true"><span class="octicon octicon-link"></span></a>Plots</h2>
+
+<h3>
+<a id="radial-dose-function-1" class="anchor" href="#radial-dose-function-1" aria-hidden="true"><span class="octicon octicon-link"></span></a>Radial Dose Function</h3>
+
+<p>Here is the radial dose function plotted against several other published seed results (other seed data from external .csv):</p>
+
+<p>{% highlight r %}
+radialPlot()
+{% endhighlight %}</p>
+
+<p><img src="http://i.imgur.com/LEpdWnt.png" title="source: imgur.com"></p>
+
+<p>And a zoom in of the area of interest from r = 0 to r = 2:</p>
+
+<p>{% highlight r %}
+radialPlotZoom()
+{% endhighlight %}</p>
+
+<p><img src="http://i.imgur.com/SPHlbIw.png" title="source: imgur.com"></p>
+
+<h3>
+<a id="2d-anisotropy" class="anchor" href="#2d-anisotropy" aria-hidden="true"><span class="octicon octicon-link"></span></a>2D Anisotropy</h3>
+
+<p>Inspiration for the following plot was taken from <a href="http://scitation.aip.org/content/aapm/journal/medphys/36/2/10.1118/1.3056463">Rivard 2008</a>.  In this plot the dotted lines are the KAERI seed, and the solid lines the IAI-125 seed.</p>
+
+<p>{% highlight r %}
+plotAniso()<br>
+{% endhighlight %}</p>
+
+<p><img src="http://i.imgur.com/G4H9KWT.png" title="source: imgur.com"></p>
+
+<h2>
+<a id="conclusion" class="anchor" href="#conclusion" aria-hidden="true"><span class="octicon octicon-link"></span></a>Conclusion</h2>
+
+<p>Calculations for TG-43 parameters of a novel brachytherapy seed were presented. The functions should be generalizable, perhaps with some slight modifications.</p>
+        </section>
+
+        <footer>
+          Brachytherapy Research is maintained by <a href="https://github.com/joelcarlson">joelcarlson</a><br>
+          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+        
+      </div>
+    </div>
+  </body>
+</html>
